@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<circuit>
+  <version>2</version>
+  <attributes/>
+  <visualElements>
+    <visualElement>
+      <elementName>Clock</elementName>
+      <elementAttributes>
+        <entry>
+          <string>runRealTime</string>
+          <boolean>true</boolean>
+        </entry>
+        <entry>
+          <string>Label</string>
+          <string>CLK</string>
+        </entry>
+        <entry>
+          <string>Frequency</string>
+          <int>100000</int>
+        </entry>
+      </elementAttributes>
+      <pos x="-820" y="220"/>
+    </visualElement>
+    <visualElement>
+      <elementName>In</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>RESET</string>
+        </entry>
+      </elementAttributes>
+      <pos x="-820" y="320"/>
+    </visualElement>
+    <visualElement>
+      <elementName>PullDown</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Bits</string>
+          <int>64</int>
+        </entry>
+      </elementAttributes>
+      <pos x="-1120" y="-500"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Not</elementName>
+      <elementAttributes/>
+      <pos x="-540" y="240"/>
+    </visualElement>
+    <visualElement>
+      <elementName>And</elementName>
+      <elementAttributes>
+        <entry>
+          <string>wideShape</string>
+          <boolean>true</boolean>
+        </entry>
+      </elementAttributes>
+      <pos x="-340" y="220"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Or</elementName>
+      <elementAttributes>
+        <entry>
+          <string>wideShape</string>
+          <boolean>true</boolean>
+        </entry>
+      </elementAttributes>
+      <pos x="-480" y="240"/>
+    </visualElement>
+    <visualElement>
+      <elementName>CounterPreset</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>PC</string>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>8</int>
+        </entry>
+      </elementAttributes>
+      <pos x="0" y="220"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Not</elementName>
+      <elementAttributes/>
+      <pos x="-100" y="240"/>
+    </visualElement>
+    <visualElement>
+      <elementName>In</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>X_IN</string>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>64</int>
+        </entry>
+      </elementAttributes>
+      <pos x="-820" y="60"/>
+    </visualElement>
+    <visualElement>
+      <elementName>In</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>M_IN</string>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>64</int>
+        </entry>
+      </elementAttributes>
+      <pos x="-820" y="0"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>M_ADDR</string>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>16</int>
+        </entry>
+      </elementAttributes>
+      <pos x="320" y="-20"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>M_OUT</string>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>64</int>
+        </entry>
+      </elementAttributes>
+      <pos x="320" y="60"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>M_WR</string>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>64</int>
+        </entry>
+      </elementAttributes>
+      <pos x="320" y="140"/>
+    </visualElement>
+  </visualElements>
+  <wires>
+    <wire>
+      <p1 x="-820" y="320"/>
+      <p2 x="-520" y="320"/>
+    </wire>
+    <wire>
+      <p1 x="-500" y="240"/>
+      <p2 x="-480" y="240"/>
+    </wire>
+    <wire>
+      <p1 x="-60" y="240"/>
+      <p2 x="0" y="240"/>
+    </wire>
+    <wire>
+      <p1 x="-260" y="240"/>
+      <p2 x="-100" y="240"/>
+    </wire>
+    <wire>
+      <p1 x="-400" y="260"/>
+      <p2 x="-340" y="260"/>
+    </wire>
+    <wire>
+      <p1 x="-520" y="280"/>
+      <p2 x="-480" y="280"/>
+    </wire>
+    <wire>
+      <p1 x="-1120" y="-540"/>
+      <p2 x="460" y="-540"/>
+    </wire>
+    <wire>
+      <p1 x="-820" y="220"/>
+      <p2 x="-340" y="220"/>
+    </wire>
+    <wire>
+      <p1 x="-520" y="280"/>
+      <p2 x="-520" y="320"/>
+    </wire>
+    <wire>
+      <p1 x="-1120" y="-540"/>
+      <p2 x="-1120" y="-500"/>
+    </wire>
+  </wires>
+  <measurementOrdering/>
+</circuit>

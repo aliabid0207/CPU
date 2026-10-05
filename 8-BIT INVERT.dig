@@ -63,8 +63,37 @@
           <string>Label</string>
           <string>OUT</string>
         </entry>
+        <entry>
+          <string>Bits</string>
+          <int>8</int>
+        </entry>
       </elementAttributes>
       <pos x="700" y="300"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Testcase</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Testdata</string>
+          <testData>
+            <dataString>IN    INVERT  OUT
+0     0       0
+0     1       0xFF
+0xFF  0       0xFF
+0xFF  1       0
+0x0F  1       0xF0
+0xA5  1       0x5A
+0x5A  0       0x5A
+0x80  1       0x7F
+0x01  1       0xFE
+loop(i,256)
+(i)   0       (i)
+(i)   1       (255-i)
+end loop</dataString>
+          </testData>
+        </entry>
+      </elementAttributes>
+      <pos x="320" y="80"/>
     </visualElement>
   </visualElements>
   <wires>

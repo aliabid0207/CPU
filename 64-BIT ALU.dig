@@ -70,7 +70,7 @@
       <elementAttributes>
         <entry>
           <string>Label</string>
-          <string>COUT</string>
+          <string>C</string>
         </entry>
       </elementAttributes>
       <pos x="840" y="420"/>
@@ -86,7 +86,7 @@
         <entry>
           <string>Testdata</string>
           <testData>
-            <dataString>A                   B                   SUB  OUT                 COUT
+            <dataString>A                   B                   SUB  OUT                 C
 0                   0                   0    0                   0
 7                   5                   0    12                  0
 7                   5                   1    2                   1

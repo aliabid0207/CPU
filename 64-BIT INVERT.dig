@@ -79,6 +79,31 @@
       </elementAttributes>
       <pos x="700" y="340"/>
     </visualElement>
+    <visualElement>
+      <elementName>Testcase</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Testdata</string>
+          <testData>
+            <dataString>IN                  INVERT  OUT
+0                   0       0
+0                   1       0xFFFFFFFFFFFFFFFF
+0xFFFFFFFFFFFFFFFF  0       0xFFFFFFFFFFFFFFFF
+0xFFFFFFFFFFFFFFFF  1       0
+0x00000000FFFFFFFF  1       0xFFFFFFFF00000000
+0x0123456789ABCDEF  1       0xFEDCBA9876543210
+0xA5A5A5A5A5A5A5A5  0       0xA5A5A5A5A5A5A5A5
+0x8000000000000000  1       0x7FFFFFFFFFFFFFFF
+0x0000000000000001  1       0xFFFFFFFFFFFFFFFE
+loop(i,64)
+(1&lt;&lt;i)              0       (1&lt;&lt;i)
+(1&lt;&lt;i)              1       (0xFFFFFFFFFFFFFFFF-(1&lt;&lt;i))
+end loop</dataString>
+          </testData>
+        </entry>
+      </elementAttributes>
+      <pos x="260" y="140"/>
+    </visualElement>
   </visualElements>
   <wires>
     <wire>
