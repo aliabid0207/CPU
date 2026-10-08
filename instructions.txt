@@ -1,95 +1,294 @@
 ========================================================================================================================================================
+CPU v2 - SHARED MEMORY (VON NEUMANN), MEMORY-MAPPED I/O, 64-BIT
+========================================================================================================================================================
+Data width          64 bits (registers, ALU, bus, memory words)
+Instruction width   64 bits (one memory word)
+Address width       16 bits (PC, P, MADDR) -> 65,536 words
+Microcode ROM       12 address bits (8 opcode + 4 step), 32 data bits
+
+
+========================================================================================================================================================
+INSTRUCTION FORMAT (64 bits)
+========================================================================================================================================================
+Bits        Field       Hex digits      Used for
+63-56       OPCODE      1st-2nd         what to do
+55-48       RESERVED    3rd-4th         0 for now (future register fields)
+47-32       ADDRESS     5th-8th         memory address (LDA, STA, ADD, SUB) or offset (LDX, STX)
+31-0        VALUE       9th-16th        constant (LDI, ADI, SBI) or jump target (JMP, JZ, JC)
+
+Example     0x 04 00 D001 00000000  =  ADD 0xD001
+            0x 03 00 0000 00000005  =  LDI 5
+            0x 06 00 0000 00001001  =  JMP 0x1001
+
+
+========================================================================================================================================================
+INSTRUCTION SET
+========================================================================================================================================================
+Opcode  Name    Operation                       Template                Sets flags
+0x00    NOP     nothing                         0x0000000000000000
+0x01    LDA     A <- MEM[addr]                  0x0100AAAA00000000
+0x02    STA     MEM[addr] <- A                  0x0200AAAA00000000
+0x03    LDI     A <- value                      0x03000000VVVVVVVV
+0x04    ADD     A <- A + MEM[addr]              0x0400AAAA00000000      Z, C
+0x05    SUB     A <- A - MEM[addr]              0x0500AAAA00000000      Z, C
+0x06    JMP     PC <- value                     0x06000000VVVVVVVV
+0x07    JZ      PC <- value if Z = 1            0x07000000VVVVVVVV
+0x08    JC      PC <- value if C = 1            0x08000000VVVVVVVV
+0x09    INP     P <- P + 1                      0x0900000000000000
+0x0A    ADI     A <- A + value                  0x0A000000VVVVVVVV      Z, C
+0x0B    SBI     A <- A - value                  0x0B000000VVVVVVVV      Z, C
+0x0C    PTA     A <- P                          0x0C00000000000000
+0x0D    STX     MEM[P + offset] <- A            0x0D00OOOO00000000
+0x0E    LDX     A <- MEM[P + offset]            0x0E00OOOO00000000
+0x0F    HLT     stop the clock                  0x0F00000000000000
+0x10    LDP     P <- A                          0x1000000000000000
+
+Note: after SUB / SBI, C = 1 means NO borrow (A >= value), C = 0 means borrow (result negative).
+
+
+========================================================================================================================================================
 MICROCODE
 ========================================================================================================================================================
-Opcode	Instruction	            Step	ADDR	ROM1	ROM2	ROM				Signals on
-0	    NOP        	            0	    0	    0500	0000	0x00000500		PC_INC, STEP_RESET
-1	    LDA,A ← RAM[addr]	    0	    16	    0505	0000	0x00000505		RAM_READ, A_LOAD, PC_INC, STEP_RESET
-2	    STA,RAM[addr] ← A	    0	    32  	000A	0000	0x0000000A		A_OUT, RAM_WRITE
-		                        1	    33  	0500	0000	0x00000500		PC_INC, STEP_RESET
-3	    LDI,A ← value	        0	    48  	0584	0000	0x00000584		VAL_OUT, A_LOAD, PC_INC, STEP_RESET
-4	    ADD,A ← A + RAM[addr]	0	    64  	0011	0000	0x00000011		RAM_READ, B_LOAD
-		                        1	    65   	0D24	0000	0x00000D24		ALU_OUT, A_LOAD, FLAGS_LOAD, PC_INC, STEP_RESET
-5	    SUB,A ← A − RAM[addr]	0	    80  	0011	0000	0x00000011		RAM_READ, B_LOAD
-		                        1	    81  	0D64	0000	0x00000D64		ALU_OUT, SUB, A_LOAD, FLAGS_LOAD, PC_INC, STEP_RESET
-6	    JMP,jump to value	    0	    96  	0600	0000	0x00000600		PC_LOAD, STEP_RESET
-7	    JZ,jump if zero	        0	    112 	1500	0000	0x00001500		JUMP_IF_ZERO, PC_INC, STEP_RESET
-8	    JC,jump if carry	    0	    128 	2500	0000	0x00002500		JUMP_IF_CARRY, PC_INC, STEP_RESET
-9	    OUT,show A	            0	    144	    4508	0000	0x00004508		A_OUT, OUT_LOAD, PC_INC, STEP_RESET
-A	    ADI,A ← A + value	    0	    160 	0090	0000	0x00000090		VAL_OUT, B_LOAD
-		                        1	    161  	0D24	0000	0x00000D24		ALU_OUT, A_LOAD, FLAGS_LOAD, PC_INC, STEP_RESET
-B	    SBI,A ← A − value	    0	    176 	0090	0000	00x0000090		VAL_OUT, B_LOAD
-	        	                1	    177 	0D64	0000	0x00000D64		ALU_OUT, SUB, A_LOAD, FLAGS_LOAD, PC_INC, STEP_RESET
-C	    IN_EN	                0	    192 	0504	0001	0x00010504		acts as NOP
-D	    spare	                0	    208 	0500	0000	0x00000500		acts as NOP
-E	    spare	                0	    224 	0500	0000	0x00000500		acts as NOP
-F	    HLT,stop	            0	    240 	8000	0000	0x00008000		HALT
+Microcode address = [ opcode AND (step != 0) ] x 16 + step
+-> at step 0 the opcode part is forced to 0, so FETCH lives once at address 0x000 for every instruction.
+-> execute steps start at step 1. PC_INC happens in FETCH, so no execute step uses it.
+
+Opcode  Instruction                 Step    ADDR    ROM             Signals on
+--      FETCH (every instruction)   0       0x000   0x00030100      IR_LOAD, ADDR_PC, PC_INC
+0x00    NOP                         1       0x001   0x00000400      STEP_RESET
+0x01    LDA,  A <- MEM[addr]        1       0x011   0x00000405      MEM_READ, A_LOAD, STEP_RESET
+0x02    STA,  MEM[addr] <- A        1       0x021   0x0000040A      A_OUT, MEM_WRITE, STEP_RESET
+0x03    LDI,  A <- value            1       0x031   0x00000484      VAL_OUT, A_LOAD, STEP_RESET
+0x04    ADD,  A <- A + MEM[addr]    1       0x041   0x00000011      MEM_READ, B_LOAD
+                                    2       0x042   0x00000C24      ALU_OUT, A_LOAD, FLAGS_LOAD, STEP_RESET
+0x05    SUB,  A <- A - MEM[addr]    1       0x051   0x00000011      MEM_READ, B_LOAD
+                                    2       0x052   0x00000C64      ALU_OUT, SUB, A_LOAD, FLAGS_LOAD, STEP_RESET
+0x06    JMP,  PC <- value           1       0x061   0x00000600      PC_LOAD, STEP_RESET
+0x07    JZ,   jump if zero          1       0x071   0x00001400      JUMP_IF_ZERO, STEP_RESET
+0x08    JC,   jump if carry         1       0x081   0x00002400      JUMP_IF_CARRY, STEP_RESET
+0x09    INP,  P <- P + 1            1       0x091   0x00100400      P_INC, STEP_RESET
+0x0A    ADI,  A <- A + value        1       0x0A1   0x00000090      VAL_OUT, B_LOAD
+                                    2       0x0A2   0x00000C24      ALU_OUT, A_LOAD, FLAGS_LOAD, STEP_RESET
+0x0B    SBI,  A <- A - value        1       0x0B1   0x00000090      VAL_OUT, B_LOAD
+                                    2       0x0B2   0x00000C64      ALU_OUT, SUB, A_LOAD, FLAGS_LOAD, STEP_RESET
+0x0C    PTA,  A <- P                1       0x0C1   0x00200404      P_OUT, A_LOAD, STEP_RESET
+0x0D    STX,  MEM[P + off] <- A     1       0x0D1   0x0004040A      A_OUT, MEM_WRITE, ADDR_P, STEP_RESET
+0x0E    LDX,  A <- MEM[P + off]     1       0x0E1   0x00040405      MEM_READ, A_LOAD, ADDR_P, STEP_RESET
+0x0F    HLT,  stop                  1       0x0F1   0x00008000      HALT
+0x10    LDP,  P <- A                1       0x101   0x00080408      A_OUT, P_LOAD, STEP_RESET
+
+Everything else = 0x00000000.
+(An unused opcode above 0x10 counts through 15 empty steps, wraps to step 0 and fetches the next instruction: a slow NOP.)
 
 
 ========================================================================================================================================================
-CONTROL SIGNALS 1
+CONTROL SIGNALS
 ========================================================================================================================================================
-Bit	Signal		    Worth	Hex value		Wire goes to
-0	RAM_READ	    1	    0x00000001		RAM read (tri-states onto bus)
-1	RAM_WRITE	    2	    0x00000002		RAM write
-2	A_LOAD		    4	    0x00000004		A register load
-3	A_OUT		    8	    0x00000008		A's tri-state onto bus
-4	B_LOAD		    1	    0x00000010		B register load
-5	ALU_OUT		    2	    0x00000020		ALU's tri-state onto bus
-6	SUB		        4	    0x00000040		ALU subtract
-7	VAL_OUT		    8	    0x00000080		value field's tri-state onto bus
-8	PC_INC		    1	    0x00000100		PC count up
-9	PC_LOAD		    2	    0x00000200		PC load (jump)
-10	STEP_RESET	    4	    0x00000400		step counter reset
-11	FLAGS_LOAD	    8	    0x00000800		save zero/carry flags
-12	JUMP_IF_ZERO	1	    0x00001000		conditional jump logic
-13	JUMP_IF_CARRY	2	    0x00002000		conditional jump logic
-14	OUT_LOAD	    4	    00004000		output register load
-15	HALT		    8	    0x00008000		stops the clock
-16	IN_EN			1		0x00010000		Input tri-state onto bus
-17  B_OUT			2		0x00020000
+Bit     Signal          Worth   Hex value       Wire goes to
+0       MEM_READ        1       0x00000001      MIN Driver onto bus
+1       MEM_WRITE       2       0x00000002      MWR output pin (memory write)
+2       A_LOAD          4       0x00000004      A register load
+3       A_OUT           8       0x00000008      A Driver onto bus
+4       B_LOAD          1       0x00000010      B register load
+5       ALU_OUT         2       0x00000020      ALU Driver onto bus
+6       SUB             4       0x00000040      ALU subtract
+7       VAL_OUT         8       0x00000080      value field Driver onto bus (32 bits + 32 zeros)
+8       PC_INC          1       0x00000100      PC counter en
+9       PC_LOAD         2       0x00000200      jump logic (unconditional jump)
+10      STEP_RESET      4       0x00000400      step counter clear
+11      FLAGS_LOAD      8       0x00000800      Z and C register load
+12      JUMP_IF_ZERO    1       0x00001000      jump logic (AND with Z)
+13      JUMP_IF_CARRY   2       0x00002000      jump logic (AND with C)
+14      (spare)         4       0x00004000      was OUT_LOAD
+15      HALT            8       0x00008000      clock gate
+16      IR_LOAD         1       0x00010000      instruction register load
+17      ADDR_PC         2       0x00020000      address mux select bit 0
+18      ADDR_P          4       0x00040000      address mux select bit 1
+19      P_LOAD          8       0x00080000      P counter ld
+20      P_INC           1       0x00100000      P counter en
+21      P_OUT           2       0x00200000      P Driver onto bus (16 bits + 48 zeros)
+22      B_OUT           4       0x00400000      B Driver onto bus
+23-31   (spare)
 
 
 ========================================================================================================================================================
 REGISTERS
 ========================================================================================================================================================
-A 	 - Main register
-B  	 - Sub register
-OUT  - Output register
-PC 	 - Program counter
-STEP - Step counter
+Name    Width   Built from              Clock           Load / control
+A       64      Register                rising          D <- bus, en = A_LOAD
+B       64      Register                rising          D <- bus, en = B_LOAD
+P       16      Counter with preset     rising          in <- bus bits 0-15, ld = P_LOAD, en = P_INC, clr = RESET
+IR      64      Register                rising          D <- MIN (direct, not bus), en = IR_LOAD, clr = RESET (optional)
+PC      16      Counter with preset     falling (NOT)   in <- IR value bits 0-15, ld = JUMP, en = PC_INC, clr = RESET, dir = 0
+STEP    4       Counter                 falling (NOT)   en = 1, clr = STEP_RESET OR RESET
 
 
 ========================================================================================================================================================
 FLAGS
 ========================================================================================================================================================
-Z - Zero flag
-C - Carry flag
+Z - Zero flag    1-bit register, D <- (ALU result == 0), en = FLAGS_LOAD, rising
+C - Carry flag   1-bit register, D <- ALU carry out,     en = FLAGS_LOAD, rising
+
+
+========================================================================================================================================================
+BUS (64 bits, one shared wire + pull-down resistor)
+========================================================================================================================================================
+Source (Driver)     sel             Destination         load
+MIN                 MEM_READ        A                   A_LOAD
+A                   A_OUT           B                   B_LOAD
+B                   B_OUT           P (bits 0-15)       P_LOAD
+ALU result          ALU_OUT         MOUT pin            (memory reads it on MEM_WRITE)
+VALUE (32 + 0s)     VAL_OUT
+P (16 + 0s)         P_OUT
+Only ONE source enabled per step. Merge zeros BEFORE the Driver, never after.
+
+Direct wires (not bus): A -> ALU in a, B -> ALU in b, MIN -> IR, IR opcode -> microcode, IR value -> PC in.
 
 
 ========================================================================================================================================================
 EXTRA LOGIC
 ========================================================================================================================================================
-Port enable    = IN_EN AND decoder line (decoder on addr bits 1-0)
-Zero-fill      = VAL_OUT OR (IN_EN AND line 2)
+Microcode addr = [ opcode AND (OR of step bits) ] , [ step ]     (opcode bits 11-4, step bits 3-0)
+MADDR mux      = ADDR_P,ADDR_PC:  00 -> IR address field
+                                  01 -> PC
+                                  10 -> P + IR address field   (16-bit adder)
 JUMP           = PC_LOAD OR (JUMP_IF_ZERO AND Z) OR (JUMP_IF_CARRY AND C)
-PC LOAD        = PC_INC OR JUMP OR RESET
+PC             = en PC_INC, ld JUMP (ld must win over en), clr RESET
 Step clear     = STEP_RESET OR RESET
-CPU clock      = CLOCK AND (NOT HALT OR RESET)
+CPU clock      = CLK AND (NOT HALT OR RESET)
+CLK_OUT        = CPU clock (memory and devices use this, so they stop on HALT)
 
 
 ========================================================================================================================================================
-CALCULATOR PROGRAM (DIGITAL)
+CPU PINS
 ========================================================================================================================================================
-0x00000000		0x00000001		0x00000002		0x00000003		0x00000004		0x00000005		0x00000006		0x00000007
+In      CLK         1
+In      RESET       1
+In      MIN         64      memory data in (instructions and data)
+Out     MADDR       16      memory address
+Out     MOUT        64      memory data out (= bus)
+Out     MWR         1       memory write (= MEM_WRITE)
+Out     CLK_OUT     1       gated clock
+Debug   DBG_A       64      A register
+Debug   DBG_PC      16      program counter
+Debug   DBG_IR      64      instruction register
+Debug   DBG_STEP    4       step counter
+Debug   DBG_Z       1       zero flag
+Debug   DBG_C       1       carry flag
 
+
+========================================================================================================================================================
+MEMORY MAP (MOTHERBOARD)
+========================================================================================================================================================
+Address             Device          Access      Notes
+0x0000 - 0x0FFF     BOOT ROM        read        bootloader, PC starts at 0x0000
+0x1000 - 0xDFFF     RAM             read/write  programs + data
+0xE000              X0              read        input port 0 (first number)
+0xE001              X1              read        input port 1 (second number)
+0xE002              X2              read        input port 2 (operator)
+0xE003              X3              read        input port 3 (equals button)
+0xE010              DISPLAY         write       64-bit register driving the display
+0xF000 - 0xFFFF     CARTRIDGE       read        program to load (address = MADDR bits 0-11)
+
+Board wiring
+Region select   = 4-bit decoder on MADDR bits 15-12 (0 boot, 1-13 RAM, 14 I/O, 15 cartridge)
+MIN             = 16-input Multiplexer, select = MADDR bits 15-12 (input 0 boot ROM, 1-13 RAM, 14 input ports, 15 cartridge)
+RAM             A = MADDR, Din = MOUT, str = MWR AND RAM region, C = CLK_OUT, ld = 1
+Input ports     4-input mux on MADDR bits 1-0 -> MIN input 14
+DISPLAY         Register, D = MOUT, en = MWR AND (MADDR == 0xE010), C = CLK_OUT
+
+
+========================================================================================================================================================
+BOOTLOADER (BOOT ROM, 0x0000)
+========================================================================================================================================================
+Cartridge format: word 0 = N (program length), words 1..N = program.
+Copies cartridge words 0..N to RAM 0x1000..0x1000+N, then jumps to 0x1001.
+Scratch: 0xDFFF holds N.
+
+Addr    Hex                     Instruction         Meaning
+0x0     0x0300000000000000      LDI 0               A = 0
+0x1     0x1000000000000000      LDP                 P = 0
+0x2     0x0100F00000000000      LDA 0xF000          A = N
+0x3     0x0200DFFF00000000      STA 0xDFFF          save N
+0x4     0x0E00F00000000000      LDX 0xF000          loop: A = CART[P]
+0x5     0x0D00100000000000      STX 0x1000          RAM[0x1000 + P] = A
+0x6     0x0C00000000000000      PTA                 A = P
+0x7     0x0500DFFF00000000      SUB 0xDFFF          Z = 1 when P = N
+0x8     0x070000000000000B      JZ 0xB              all copied -> done
+0x9     0x0900000000000000      INP                 P = P + 1
+0xA     0x0600000000000004      JMP 0x4             repeat
+0xB     0x0600000000001001      JMP 0x1001          run the program
+
+
+========================================================================================================================================================
+CALCULATOR PROGRAM (CARTRIDGE, runs at 0x1001)
+========================================================================================================================================================
+Ports: 0xE000 = X, 0xE001 = Y, 0xE002 = op (0 add, 1 sub, 2 mul), 0xE003 = equals, 0xE010 = display
+Data:  0xD000 = X, 0xD001 = Y / counter, 0xD002 = result
+Jump targets = 0x1001 + line
+
+Cart    RAM     Hex                     Instruction         Meaning
+0       0x1000  0x0000000000000023      (N = 35)            length header
+1       0x1001  0x0100E00000000000      LDA 0xE000          A = X
+2       0x1002  0x0200D00000000000      STA 0xD000
+3       0x1003  0x0100E00100000000      LDA 0xE001          A = Y
+4       0x1004  0x0200D00100000000      STA 0xD001
+5       0x1005  0x0100E00200000000      LDA 0xE002          A = op
+6       0x1006  0x0A00000000000000      ADI 0               set flags
+7       0x1007  0x070000000000100D      JZ 0x100D           op 0 -> add
+8       0x1008  0x0B00000000000001      SBI 1
+9       0x1009  0x0700000000001010      JZ 0x1010           op 1 -> sub
+10      0x100A  0x0B00000000000001      SBI 1
+11      0x100B  0x0700000000001013      JZ 0x1013           op 2 -> mul
+12      0x100C  0x0600000000001020      JMP 0x1020          unknown op -> wait for =
+13      0x100D  0x0100D00000000000      LDA 0xD000          add: A = X
+14      0x100E  0x0400D00100000000      ADD 0xD001          A = X + Y
+15      0x100F  0x060000000000101F      JMP 0x101F          -> show
+16      0x1010  0x0100D00000000000      LDA 0xD000          sub: A = X
+17      0x1011  0x0500D00100000000      SUB 0xD001          A = X - Y
+18      0x1012  0x060000000000101F      JMP 0x101F          -> show
+19      0x1013  0x0300000000000000      LDI 0               mul: A = 0
+20      0x1014  0x0200D00200000000      STA 0xD002          result = 0
+21      0x1015  0x0100D00100000000      LDA 0xD001          loop: A = counter
+22      0x1016  0x0A00000000000000      ADI 0               set flags
+23      0x1017  0x070000000000101E      JZ 0x101E           counter = 0 -> done
+24      0x1018  0x0B00000000000001      SBI 1               counter - 1
+25      0x1019  0x0200D00100000000      STA 0xD001
+26      0x101A  0x0100D00200000000      LDA 0xD002          A = result
+27      0x101B  0x0400D00000000000      ADD 0xD000          result + X
+28      0x101C  0x0200D00200000000      STA 0xD002
+29      0x101D  0x0600000000001015      JMP 0x1015          repeat
+30      0x101E  0x0100D00200000000      LDA 0xD002          A = result
+31      0x101F  0x0200E01000000000      STA 0xE010          show A on display
+32      0x1020  0x0100E00300000000      LDA 0xE003          wait: A = equals
+33      0x1021  0x0A00000000000000      ADI 0               set flags
+34      0x1022  0x0700000000001020      JZ 0x1020           not pressed -> wait
+35      0x1023  0x0600000000001001      JMP 0x1001          pressed -> start over
+
+
+========================================================================================================================================================
+BUILD ORDER
+========================================================================================================================================================
+1   CPU core       A, B, ALU, flags, bus + Drivers, microcode ROM, STEP, PC
+2   Fetch          IR, address mux, microcode address trick (opcode AND step != 0), FETCH at 0x000
+3   Test board     CPU + 1 ROM (program at 0x0000) + RAM on MADDR/MIN/MOUT/MWR; test LDI, LDA/STA, ADD/SUB, jumps with DBG_A
+4   P register     LDP, INP, PTA, LDX, STX (16-bit adder P + offset in the address mux)
+5   Motherboard    memory map: boot ROM, RAM, input ports, display register, cartridge
+6   Boot           bootloader in boot ROM, calculator on cartridge, run it
+
+
+========================================================================================================================================================
+LEGACY - CALCULATOR (DIGITAL, CPU v1, 32-bit instructions, internal ROM)
+========================================================================================================================================================
 0x0C000000		0x02000000		0x0C010000		0x02010000		0x0C020000		0x0A000000		0x0700000C		0x0B000001
 0x0700000F		0x0B000001		0x07000012		0x0600001F		0x01000000		0x04010000		0x0600001E		0x01000000
 0x05010000		0x0600001E		0x03000000		0x02020000		0x01010000		0x0A000000		0x0700001D		0x0B000001
 0x02010000		0x01020000		0x04000000		0x02020000		0x06000014		0x01020000		0x09000000		0x0C030000
 0x0A000000		0x0700001F		0x06000000
 
+
 ========================================================================================================================================================
-CALCULATOR PROGRAM (DIGITAL LOGIC SIM)
+LEGACY - CALCULATOR (DIGITAL LOGIC SIM, 16-bit instructions)
 ========================================================================================================================================================
 C000
 2000
