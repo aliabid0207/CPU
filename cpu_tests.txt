@@ -1,0 +1,390 @@
+========================================================================================================================
+CPU v3 TESTS - self-checking programs
+========================================================================================================================
+How these work
+  Each program checks its own results with CMP + branch. On success it reaches the "pass" HLT; on any failure it
+  jumps to its own numbered HLT (f1, f2, ...). The CPU stops on HLT with PC = (address of that HLT) + 8, so
+  DBG_PC tells you exactly which check failed. No register debug pins needed.
+
+Test board
+  CPU + ROM (64-bit data, address = MADDR[15:3]) feeding MIN.
+  TEST 2 also needs RAM at 0x00100000 (the 8 byte lanes) - run TEST 1 first with ROM only.
+  CLK and RESET must be ordinary Input pins (a test can't drive a Clock component).
+
+Running
+  1. Assemble the source with your assembler (or paste the hex) into the ROM.
+  2. Put the matching test table on the test board and run it.
+
+========================================================================================================================
+TEST 1 - ALU, compares, all branches, CALL/RET, R0 (ROM only)
+========================================================================================================================
+Instructions executed: 59  (2 clocks each = 118 clocks; the test gives 200)
+PASS: DBG_PC = 0x1E8
+
+Digital test table:
+CLK  RESET  DBG_PC
+C    1      X
+repeat(200) C 0 X
+0    0      0x1E8
+
+If it fails, DBG_PC shows which check:
+  0x200  f1    ADD wrong (5 + 3 != 8)
+  0x208  f2    SUB wrong (5 - 3 != 2)
+  0x210  f3    SUB negative wrong (3 - 5 != -2), or CMPI sign-extension
+  0x218  f4    AND wrong
+  0x220  f5    OR wrong
+  0x228  f6    XOR wrong
+  0x230  f7    SHLI wrong (5 << 4 != 80)
+  0x238  f8    SHRI wrong (80 >> 2 != 20)
+  0x240  f9    SARI wrong (-16 >> 2 != -4): shifter not arithmetic
+  0x248  f10   LUI or 64-bit SHRI wrong
+  0x250  f11   BGE jumped when 3 < 5 (signed): N/V or COND 4
+  0x258  f12   BLT did not jump when 3 < 5: N/V or COND 3
+  0x260  f13   BLTU jumped when 0xFFFF... vs 5 (unsigned): C or COND 5
+  0x268  f14   BLT did not jump when -1 < 5: V/N
+  0x270  f15   BNE jumped on equal values: Z or COND 2
+  0x278  f16   BEQ did not jump on equal: Z or COND 1
+  0x280  f17   BGEU did not jump on equal: C or COND 6
+  0x288  f18   CALL/RET wrong (R9 != 42): LR link, WB=PC, JR
+  0x290  f19   R0 not reading 0 after a write to it
+  0x298  f20   R0 not reading 0
+
+Source:
+; ---------- CPU TEST 1: registers, ALU, compares, branches, CALL/RET (no RAM) ----------
+        LI   R1, 5
+        LI   R2, 3
+        ADD  R3, R1, R2         ; 8
+        CMPI R3, 8
+        BNE  f1
+        SUB  R3, R1, R2         ; 2
+        CMPI R3, 2
+        BNE  f2
+        SUB  R3, R2, R1         ; -2
+        CMPI R3, -2
+        BNE  f3
+        LI   R4, 0x0F0
+        LI   R5, 0x0FF
+        AND  R6, R4, R5         ; 0xF0
+        CMPI R6, 0xF0
+        BNE  f4
+        OR   R6, R4, R2         ; 0xF3
+        CMPI R6, 0xF3
+        BNE  f5
+        XOR  R6, R4, R5         ; 0x0F
+        CMPI R6, 0x0F
+        BNE  f6
+        SHLI R6, R1, 4          ; 80
+        CMPI R6, 80
+        BNE  f7
+        SHRI R6, R6, 2          ; 20
+        CMPI R6, 20
+        BNE  f8
+        LI   R6, -16
+        SARI R6, R6, 2          ; -4
+        CMPI R6, -4
+        BNE  f9
+        LUI  R7, 1              ; 0x100000000
+        SHRI R7, R7, 32         ; 1
+        CMPI R7, 1
+        BNE  f10
+        CMP  R2, R1             ; 3 vs 5
+        BGE  f11                ; signed: 3 >= 5 is false
+        BLT  t1
+        JMP  f12
+t1:     LI   R8, -1
+        CMP  R8, R1             ; -1 vs 5
+        BLTU f13                ; unsigned: 0xFFFF.. < 5 is false
+        BLT  t2                 ; signed: -1 < 5 is true
+        JMP  f14
+t2:     CMP  R1, R1
+        BNE  f15
+        BEQ  t3
+        JMP  f16
+t3:     BGEU t4                 ; equal -> C = 1
+        JMP  f17
+t4:     LI   R9, 0
+        CALL sub
+        CMPI R9, 42
+        BNE  f18
+        ADD  R0, R1, R2         ; write to R0 is ignored
+        CMP  R0, R0
+        BNE  f19
+        CMPI R0, 0
+        BNE  f20
+pass:   HLT
+sub:    LI   R9, 42
+        RET
+f1:     HLT
+f2:     HLT
+f3:     HLT
+f4:     HLT
+f5:     HLT
+f6:     HLT
+f7:     HLT
+f8:     HLT
+f9:     HLT
+f10:    HLT
+f11:    HLT
+f12:    HLT
+f13:    HLT
+f14:    HLT
+f15:    HLT
+f16:    HLT
+f17:    HLT
+f18:    HLT
+f19:    HLT
+f20:    HLT
+
+Hex (address  word  instruction):
+0x00000000  0x1810000000000005  LI R1, 5
+0x00000008  0x1820000000000003  LI R2, 3
+0x00000010  0x1031200000000000  ADD R3, R1, R2
+0x00000018  0x2103000000000008  CMPI R3, 8
+0x00000020  0x42000000000001F8  BNE f1
+0x00000028  0x1131200000000000  SUB R3, R1, R2
+0x00000030  0x2103000000000002  CMPI R3, 2
+0x00000038  0x4200000000000200  BNE f2
+0x00000040  0x1132100000000000  SUB R3, R2, R1
+0x00000048  0x21030000FFFFFFFE  CMPI R3, -2
+0x00000050  0x4200000000000208  BNE f3
+0x00000058  0x18400000000000F0  LI R4, 0x0F0
+0x00000060  0x18500000000000FF  LI R5, 0x0FF
+0x00000068  0x1264500000000000  AND R6, R4, R5
+0x00000070  0x21060000000000F0  CMPI R6, 0xF0
+0x00000078  0x4200000000000210  BNE f4
+0x00000080  0x1364200000000000  OR R6, R4, R2
+0x00000088  0x21060000000000F3  CMPI R6, 0xF3
+0x00000090  0x4200000000000218  BNE f5
+0x00000098  0x1464500000000000  XOR R6, R4, R5
+0x000000A0  0x210600000000000F  CMPI R6, 0x0F
+0x000000A8  0x4200000000000220  BNE f6
+0x000000B0  0x1C61000000000004  SHLI R6, R1, 4
+0x000000B8  0x2106000000000050  CMPI R6, 80
+0x000000C0  0x4200000000000228  BNE f7
+0x000000C8  0x1D66000000000002  SHRI R6, R6, 2
+0x000000D0  0x2106000000000014  CMPI R6, 20
+0x000000D8  0x4200000000000230  BNE f8
+0x000000E0  0x18600000FFFFFFF0  LI R6, -16
+0x000000E8  0x1E66000000000002  SARI R6, R6, 2
+0x000000F0  0x21060000FFFFFFFC  CMPI R6, -4
+0x000000F8  0x4200000000000238  BNE f9
+0x00000100  0x1F70000000000001  LUI R7, 1
+0x00000108  0x1D77000000000020  SHRI R7, R7, 32
+0x00000110  0x2107000000000001  CMPI R7, 1
+0x00000118  0x4200000000000240  BNE f10
+0x00000120  0x2002100000000000  CMP R2, R1
+0x00000128  0x4400000000000248  BGE f11
+0x00000130  0x4300000000000140  BLT t1
+0x00000138  0x4000000000000250  JMP f12
+0x00000140  0x18800000FFFFFFFF  LI R8, -1
+0x00000148  0x2008100000000000  CMP R8, R1
+0x00000150  0x4500000000000258  BLTU f13
+0x00000158  0x4300000000000168  BLT t2
+0x00000160  0x4000000000000260  JMP f14
+0x00000168  0x2001100000000000  CMP R1, R1
+0x00000170  0x4200000000000268  BNE f15
+0x00000178  0x4100000000000188  BEQ t3
+0x00000180  0x4000000000000270  JMP f16
+0x00000188  0x4600000000000198  BGEU t4
+0x00000190  0x4000000000000278  JMP f17
+0x00000198  0x1890000000000000  LI R9, 0
+0x000001A0  0x48000000000001E8  CALL sub
+0x000001A8  0x210900000000002A  CMPI R9, 42
+0x000001B0  0x4200000000000280  BNE f18
+0x000001B8  0x1001200000000000  ADD R0, R1, R2
+0x000001C0  0x2000000000000000  CMP R0, R0
+0x000001C8  0x4200000000000288  BNE f19
+0x000001D0  0x2100000000000000  CMPI R0, 0
+0x000001D8  0x4200000000000290  BNE f20
+0x000001E0  0x0100000000000000  HLT
+0x000001E8  0x189000000000002A  LI R9, 42
+0x000001F0  0x490E000000000000  RET
+0x000001F8  0x0100000000000000  HLT
+0x00000200  0x0100000000000000  HLT
+0x00000208  0x0100000000000000  HLT
+0x00000210  0x0100000000000000  HLT
+0x00000218  0x0100000000000000  HLT
+0x00000220  0x0100000000000000  HLT
+0x00000228  0x0100000000000000  HLT
+0x00000230  0x0100000000000000  HLT
+0x00000238  0x0100000000000000  HLT
+0x00000240  0x0100000000000000  HLT
+0x00000248  0x0100000000000000  HLT
+0x00000250  0x0100000000000000  HLT
+0x00000258  0x0100000000000000  HLT
+0x00000260  0x0100000000000000  HLT
+0x00000268  0x0100000000000000  HLT
+0x00000270  0x0100000000000000  HLT
+0x00000278  0x0100000000000000  HLT
+0x00000280  0x0100000000000000  HLT
+0x00000288  0x0100000000000000  HLT
+0x00000290  0x0100000000000000  HLT
+
+========================================================================================================================
+TEST 2 - loads, stores, byte lanes, stack, recursion (ROM + RAM)
+========================================================================================================================
+Instructions executed: 169  (2 clocks each = 338 clocks; the test gives 500)
+PASS: DBG_PC = 0x170
+
+Digital test table:
+CLK  RESET  DBG_PC
+C    1      X
+repeat(500) C 0 X
+0    0      0x170
+
+If it fails, DBG_PC shows which check:
+  0x1D8  f1    SD/LD 64-bit round trip wrong (or LUI+ORI)
+  0x1E0  f2    LBU lane 0 wrong
+  0x1E8  f3    LB sign-extension wrong
+  0x1F0  f4    LBU lane 7 wrong
+  0x1F8  f5    LHU lane 2 wrong
+  0x200  f6    LWU lane 4 wrong
+  0x208  f7    SB wrote more than one lane (MBE) or wrong lane
+  0x210  f8    SH / LHU lane 6 wrong
+  0x218  f9    SH disturbed lane 5 (MBE)
+  0x220  f10   recursive CALL wrong (stack loads/stores, LR save/restore)
+  0x228  f11   SP not restored after the calls
+
+Source:
+; ---------- CPU TEST 2: loads, stores, bytes, stack (needs RAM at 0x00100000) ----------
+        LI   SP, 0x00200000
+        LI   R1, 0x00100000
+        LUI  R2, 0x01234567
+        ORI  R2, R2, 0x89ABCDEF  ; R2 = 0x0123456789ABCDEF
+        SD   R2, [R1+0]
+        LD   R3, [R1+0]
+        CMP  R3, R2
+        BNE  f1
+        LBU  R3, [R1+0]          ; 0xEF
+        CMPI R3, 0xEF
+        BNE  f2
+        LB   R3, [R1+0]          ; -17
+        CMPI R3, -17
+        BNE  f3
+        LBU  R3, [R1+7]          ; 0x01
+        CMPI R3, 1
+        BNE  f4
+        LHU  R3, [R1+2]          ; 0x89AB
+        CMPI R3, 0x89AB
+        BNE  f5
+        LWU  R3, [R1+4]          ; 0x01234567
+        CMPI R3, 0x01234567
+        BNE  f6
+        LI   R4, 0x41
+        SB   R4, [R1+3]          ; change byte 3 only
+        LD   R3, [R1+0]
+        LUI  R5, 0x01234567
+        ORI  R5, R5, 0x41ABCDEF
+        CMP  R3, R5
+        BNE  f7
+        LI   R4, 0x7777
+        SH   R4, [R1+6]          ; top 16 bits
+        LHU  R3, [R1+6]
+        CMPI R3, 0x7777
+        BNE  f8
+        LBU  R3, [R1+5]          ; byte 5 untouched = 0x45
+        CMPI R3, 0x45
+        BNE  f9
+        LI   R6, 10
+        CALL sum                 ; R6 = 10+9+...+1 = 55 (recursive, uses the stack)
+        CMPI R6, 55
+        BNE  f10
+        LI   R3, 0x00200000
+        CMP  SP, R3              ; stack pointer back where it started
+        BNE  f11
+pass:   HLT
+sum:    CMPI R6, 0
+        BEQ  sret
+        ADDI SP, SP, -16
+        SD   LR, [SP+0]
+        SD   R6, [SP+8]
+        ADDI R6, R6, -1
+        CALL sum
+        LD   R7, [SP+8]
+        ADD  R6, R6, R7
+        LD   LR, [SP+0]
+        ADDI SP, SP, 16
+sret:   RET
+f1:     HLT
+f2:     HLT
+f3:     HLT
+f4:     HLT
+f5:     HLT
+f6:     HLT
+f7:     HLT
+f8:     HLT
+f9:     HLT
+f10:    HLT
+f11:    HLT
+
+Hex (address  word  instruction):
+0x00000000  0x18F0000000200000  LI SP, 0x00200000
+0x00000008  0x1810000000100000  LI R1, 0x00100000
+0x00000010  0x1F20000001234567  LUI R2, 0x01234567
+0x00000018  0x1A22000089ABCDEF  ORI R2, R2, 0x89ABCDEF
+0x00000020  0x3B01200000000000  SD R2, [R1+0]
+0x00000028  0x3631000000000000  LD R3, [R1+0]
+0x00000030  0x2003200000000000  CMP R3, R2
+0x00000038  0x42000000000001D0  BNE f1
+0x00000040  0x3131000000000000  LBU R3, [R1+0]
+0x00000048  0x21030000000000EF  CMPI R3, 0xEF
+0x00000050  0x42000000000001D8  BNE f2
+0x00000058  0x3031000000000000  LB R3, [R1+0]
+0x00000060  0x21030000FFFFFFEF  CMPI R3, -17
+0x00000068  0x42000000000001E0  BNE f3
+0x00000070  0x3131000000000007  LBU R3, [R1+7]
+0x00000078  0x2103000000000001  CMPI R3, 1
+0x00000080  0x42000000000001E8  BNE f4
+0x00000088  0x3331000000000002  LHU R3, [R1+2]
+0x00000090  0x21030000000089AB  CMPI R3, 0x89AB
+0x00000098  0x42000000000001F0  BNE f5
+0x000000A0  0x3531000000000004  LWU R3, [R1+4]
+0x000000A8  0x2103000001234567  CMPI R3, 0x01234567
+0x000000B0  0x42000000000001F8  BNE f6
+0x000000B8  0x1840000000000041  LI R4, 0x41
+0x000000C0  0x3801400000000003  SB R4, [R1+3]
+0x000000C8  0x3631000000000000  LD R3, [R1+0]
+0x000000D0  0x1F50000001234567  LUI R5, 0x01234567
+0x000000D8  0x1A55000041ABCDEF  ORI R5, R5, 0x41ABCDEF
+0x000000E0  0x2003500000000000  CMP R3, R5
+0x000000E8  0x4200000000000200  BNE f7
+0x000000F0  0x1840000000007777  LI R4, 0x7777
+0x000000F8  0x3901400000000006  SH R4, [R1+6]
+0x00000100  0x3331000000000006  LHU R3, [R1+6]
+0x00000108  0x2103000000007777  CMPI R3, 0x7777
+0x00000110  0x4200000000000208  BNE f8
+0x00000118  0x3131000000000005  LBU R3, [R1+5]
+0x00000120  0x2103000000000045  CMPI R3, 0x45
+0x00000128  0x4200000000000210  BNE f9
+0x00000130  0x186000000000000A  LI R6, 10
+0x00000138  0x4800000000000170  CALL sum
+0x00000140  0x2106000000000037  CMPI R6, 55
+0x00000148  0x4200000000000218  BNE f10
+0x00000150  0x1830000000200000  LI R3, 0x00200000
+0x00000158  0x200F300000000000  CMP SP, R3
+0x00000160  0x4200000000000220  BNE f11
+0x00000168  0x0100000000000000  HLT
+0x00000170  0x2106000000000000  CMPI R6, 0
+0x00000178  0x41000000000001C8  BEQ sret
+0x00000180  0x18FF0000FFFFFFF0  ADDI SP, SP, -16
+0x00000188  0x3B0FE00000000000  SD LR, [SP+0]
+0x00000190  0x3B0F600000000008  SD R6, [SP+8]
+0x00000198  0x18660000FFFFFFFF  ADDI R6, R6, -1
+0x000001A0  0x4800000000000170  CALL sum
+0x000001A8  0x367F000000000008  LD R7, [SP+8]
+0x000001B0  0x1066700000000000  ADD R6, R6, R7
+0x000001B8  0x36EF000000000000  LD LR, [SP+0]
+0x000001C0  0x18FF000000000010  ADDI SP, SP, 16
+0x000001C8  0x490E000000000000  RET
+0x000001D0  0x0100000000000000  HLT
+0x000001D8  0x0100000000000000  HLT
+0x000001E0  0x0100000000000000  HLT
+0x000001E8  0x0100000000000000  HLT
+0x000001F0  0x0100000000000000  HLT
+0x000001F8  0x0100000000000000  HLT
+0x00000200  0x0100000000000000  HLT
+0x00000208  0x0100000000000000  HLT
+0x00000210  0x0100000000000000  HLT
+0x00000218  0x0100000000000000  HLT
+0x00000220  0x0100000000000000  HLT
+
